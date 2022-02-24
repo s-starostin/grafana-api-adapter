@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 type User struct {
@@ -22,8 +23,8 @@ type User struct {
 	IsDisabled     bool               `json:"isDisabled"`
 	IsExternal     bool               `json:"isExternal"`
 	AuthLabels     []string           `json:"authLabels"`
-	UpdatedAt      string             `json:"updatedAt"`
-	CreatedAt      string             `json:"createdAt"`
+	UpdatedAt      time.Time          `json:"updatedAt"`
+	CreatedAt      time.Time          `json:"createdAt"`
 	AvatarUrl      string             `json:"avatarUrl"`
 	Organizations  []UserOrganization `json:"organizations,omitempty"`
 }

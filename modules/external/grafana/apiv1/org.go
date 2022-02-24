@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 )
 
 type Organization struct {
@@ -15,13 +16,13 @@ type Organization struct {
 }
 
 type OrganizationUser struct {
-	Id         int    `json:"userId"`
-	Email      string `json:"email"`
-	Name       string `json:"name"`
-	Login      string `json:"login"`
-	OrgId      int    `json:"orgId"`
-	Role       string `json:"role"`
-	LastSeenAt string `json:"lastSeenAt"`
+	Id         int       `json:"userId"`
+	Email      string    `json:"email"`
+	Name       string    `json:"name"`
+	Login      string    `json:"login"`
+	OrgId      int       `json:"orgId"`
+	Role       string    `json:"role"`
+	LastSeenAt time.Time `json:"lastSeenAt"`
 }
 
 func GetOrganizations() (*[]Organization, error) {
