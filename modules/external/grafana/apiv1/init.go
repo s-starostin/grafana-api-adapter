@@ -7,7 +7,7 @@ import (
 
 var grafanaClientSettings = struct {
 	url      string
-	timeout  int
+	timeout  time.Duration
 	login    string
 	password string
 }{
