@@ -24,7 +24,7 @@ func Start() {
 	f.Map(log.New(os.Stdout, "[grafana-adapter] ", 0))
 
 	//users
-	f.Get("/user/", func(c flamego.Context) string {
+	f.Get("/users/", func(c flamego.Context) string {
 		requestBody, err := c.Request().Body().Bytes()
 		if err != nil {
 			log.Print("Got error: " + err.Error())
@@ -47,7 +47,7 @@ func Start() {
 		c.ResponseWriter().Header().Add("Content-Type", "application/json")
 		return string(jsonResponse)
 	})
-	f.Delete("/user/", func(c flamego.Context) string {
+	f.Delete("/users/", func(c flamego.Context) string {
 		requestBody, err := c.Request().Body().Bytes()
 		if err != nil {
 			log.Print("Got error: " + err.Error())
@@ -72,7 +72,7 @@ func Start() {
 		c.ResponseWriter().Header().Add("Content-Type", "application/json")
 		return strconv.FormatBool(status)
 	})
-	f.Post("/user/", func(c flamego.Context) string {
+	f.Post("/users/", func(c flamego.Context) string {
 		requestBody, err := c.Request().Body().Bytes()
 		if err != nil {
 			log.Print("Got error: " + err.Error())
@@ -104,7 +104,7 @@ func Start() {
 
 		return string(result) //strconv.FormatBool(user.Id > 0);
 	})
-	f.Get("/user/search/{slug}", func(c flamego.Context) string {
+	f.Get("/users/search/{slug}", func(c flamego.Context) string {
 		res, err := grafana.SearchUsers(c.Param("query"))
 		if err != nil {
 			log.Print("Got error: " + err.Error())
@@ -116,7 +116,7 @@ func Start() {
 		c.ResponseWriter().Header().Add("Content-Type", "application/json")
 		return string(jsonResponse)
 	})
-	f.Patch("/user/organizations/", func(c flamego.Context) string {
+	f.Patch("/users/organizations/", func(c flamego.Context) string {
 		requestBody, err := c.Request().Body().Bytes()
 		if err != nil {
 			log.Print("Got error: " + err.Error())
@@ -147,7 +147,7 @@ func Start() {
 	})
 
 	//organizations
-	f.Post("/organization/", func(c flamego.Context) string {
+	f.Post("/organizations/", func(c flamego.Context) string {
 		requestBody, err := c.Request().Body().Bytes()
 		if err != nil {
 			log.Print("Got error: " + err.Error())
@@ -171,7 +171,7 @@ func Start() {
 
 		return string(result)
 	})
-	f.Delete("/organization/", func(c flamego.Context) string {
+	f.Delete("/organizations/", func(c flamego.Context) string {
 		requestBody, err := c.Request().Body().Bytes()
 		if err != nil {
 			log.Print("Got error: " + err.Error())
