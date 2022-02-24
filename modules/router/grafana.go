@@ -36,10 +36,10 @@ func Start() {
 			log.Print("Got error: " + err.Error())
 		}
 
+		res, err := grafana.GetUser(&user)
 		if user.Id == 0 {
 			return "null"
 		}
-		res, err := grafana.GetUser(&user)
 		jsonResponse, err := json.Marshal(res)
 		if err != nil {
 			log.Print("Got error: " + err.Error())
@@ -147,6 +147,42 @@ func Start() {
 	})
 
 	//organizations
+	f.Get("/organizations/", func(c flamego.Context) string {
+		requestBody, err := c.Request().Body().Bytes()
+		if err != nil {
+			log.Print("Got error: " + err.Error())
+		}
+
+        jsonResponse := []byte("")
+
+        if string(requestBody) == "" {
+            res, err := grafana.GetOrganizations()
+            if err != nil {
+                log.Print("Got error: " + err.Error())
+            }
+            jsonResponse, err = json.Marshal(res)
+            if err != nil {
+                log.Print("Got error: " + err.Error())
+            }
+        } else {
+            var organization grafana.Organization
+            err := json.Unmarshal(requestBody, &organization)
+            if err != nil {
+                log.Print("Got error: " + err.Error())
+            }
+
+            res, err := grafana.GetOrganization(&organization)
+            if organization.Id == 0 {
+                return "null"
+            }
+            jsonResponse, err = json.Marshal(res)
+            if err != nil {
+                log.Print("Got error: " + err.Error())
+            }
+		}
+		c.ResponseWriter().Header().Add("Content-Type", "application/json")
+		return string(jsonResponse)
+	})
 	f.Post("/organizations/", func(c flamego.Context) string {
 		requestBody, err := c.Request().Body().Bytes()
 		if err != nil {
