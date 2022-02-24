@@ -23,7 +23,7 @@ type User struct {
 	IsExternal     bool               `json:"isExternal"`
 	AuthLabels     []string           `json:"authLabels"`
 	UpdatedAt      string             `json:"updatedAt"`
-	CreatedAt      string             `json:"updatedAt"`
+	CreatedAt      string             `json:"createdAt"`
 	AvatarUrl      string             `json:"avatarUrl"`
 	Organizations  []UserOrganization `json:"organizations,omitempty"`
 }
