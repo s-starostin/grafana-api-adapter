@@ -19,7 +19,7 @@ var grafanaClientSettings = struct {
 
 var client http.Client
 
-func NewClient(url string, login string, password string) {
+func NewClient(url, login, password string) {
 	grafanaClientSettings.url = url
 	grafanaClientSettings.login = login
 	grafanaClientSettings.password = password
