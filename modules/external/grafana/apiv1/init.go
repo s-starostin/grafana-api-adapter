@@ -27,5 +27,5 @@ func NewClient(url, login, password string) {
 }
 
 func buildClient() {
-	client = http.Client{Timeout: time.Duration(grafanaClientSettings.timeout) * time.Second}
+	client = http.Client{Timeout: grafanaClientSettings.timeout * time.Second}
 }
