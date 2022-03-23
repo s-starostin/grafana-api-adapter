@@ -1,7 +1,6 @@
 # Grafana API adapter
 
-You could specify the absolute path to the directory with config.ini via the GRAFANA_ADAPTER_CONF environment variable.
-export:
+You could specify the absolute path to the directory with config.ini via the GRAFANA_ADAPTER_CONF environment variable:
 ```bash
 export GRAFANA_ADAPTER_CONF=/tmp && ./grafana-adapter & 
 ```
