@@ -10,9 +10,9 @@ import (
 )
 
 type Datasource struct {
-	Id                int         `json:"id"`
+	Id                int64       `json:"id"`
 	Uid               string      `json:"uid"`
-	OrgId             int         `json:"orgId"`
+	OrgId             int64       `json:"orgId"`
 	Name              string      `json:"name"`
 	Type              string      `json:"type"`
 	TypeLogoUrl       string      `json:"typeLogoUrl"`
@@ -72,7 +72,7 @@ func CreateDatasource(datasource *Datasource) (*Datasource, error) {
 		}
 
 		if data["message"] == "Datasource added" {
-			datasource.Id = int(data["id"].(float64))
+			datasource.Id = int64(data["id"].(float64))
 		}
 
 		return datasource, nil
@@ -82,7 +82,7 @@ func CreateDatasource(datasource *Datasource) (*Datasource, error) {
 }
 
 func UpdateDatasource(datasource Datasource) (bool, error) {
-	slug := "/api/datasources/" + strconv.Itoa(datasource.Id)
+	slug := "/api/datasources/" + strconv.FormatInt(datasource.Id, 10)
 	url := grafanaClientSettings.url + slug
 
 	payloadBuffer := new(bytes.Buffer)
@@ -129,7 +129,7 @@ func DeleteDatasource(datasource *Datasource) (bool, error) {
 		return false, errors.New("Nil pointer")
 	}
 
-	slug := "/api/datasources/" + strconv.Itoa(datasource.Id)
+	slug := "/api/datasources/" + strconv.FormatInt(datasource.Id, 10)
 	url := grafanaClientSettings.url + slug
 
 	req, err := http.NewRequest(http.MethodDelete, url, nil)
@@ -174,7 +174,7 @@ func GetDatasource(datasource *Datasource) (*Datasource, error) {
 	if datasource == nil {
 		return nil, errors.New("Nil pointer")
 	} else if datasource.Id > 0 {
-		slug = "/api/datasources/" + strconv.Itoa(datasource.Id)
+		slug = "/api/datasources/" + strconv.FormatInt(datasource.Id, 10)
 	} else if datasource.Uid != "" {
 		slug = "/api/datasources/uid/" + datasource.Uid
 	} else if datasource.Name != "" {

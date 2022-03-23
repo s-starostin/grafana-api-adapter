@@ -12,13 +12,13 @@ import (
 )
 
 type User struct {
-	Id             int                `json:"id,omitempty"`
+	Id             int64              `json:"id,omitempty"`
 	Email          string             `json:"email"`
 	Name           string             `json:"name"`
 	Login          string             `json:"login"`
 	Password       string             `json:"password,omitempty"`
 	Theme          string             `json:"theme"`
-	OrgId          int                `json:"orgId"`
+	OrgId          int64              `json:"orgId"`
 	IsGrafanaAdmin bool               `json:"isGrafanaAdmin"`
 	IsDisabled     bool               `json:"isDisabled"`
 	IsExternal     bool               `json:"isExternal"`
@@ -30,7 +30,7 @@ type User struct {
 }
 
 type UserOrganization struct {
-	Id   int    `json:"orgId,omitempty"`
+	Id   int64  `json:"orgId,omitempty"`
 	Name string `json:"name"`
 	Role string `json:"role"`
 }
@@ -88,7 +88,7 @@ func GetUser(user *User) (*User, error) {
 	if user == nil {
 		return nil, errors.New("Nil pointer")
 	} else if user.Id > 0 {
-		slug = "/api/users/" + strconv.Itoa(user.Id)
+		slug = "/api/users/" + strconv.FormatInt(user.Id, 10)
 	} else if user.Email != "" || user.Login != "" {
 		slug = "/api/users/lookup"
 	} else {
@@ -137,18 +137,17 @@ func GetUser(user *User) (*User, error) {
 		if err != nil {
 			return nil, err
 		}
-		if user.Id == 0 {
-			return user, errors.New("Empty result")
-		}
 
 		return user, nil
+	} else if res.StatusCode == 404 {
+		return user, errors.New("Empty result")
 	}
 
 	return nil, errors.New("Got response: " + strconv.Itoa(res.StatusCode) + ", body: " + string(body))
 }
 
 func UpdateUser(user User) (bool, error) {
-	slug := "/api/users/" + strconv.Itoa(user.Id)
+	slug := "/api/users/" + strconv.FormatInt(user.Id, 10)
 	url := grafanaClientSettings.url + slug
 
 	payloadBuffer := new(bytes.Buffer)
@@ -195,7 +194,7 @@ func SetUserGrafanaAdmin(user *User, isAdmin bool) (bool, error) {
 		return false, errors.New("Nil pointer")
 	}
 
-	slug := "/api/admin/users/" + strconv.Itoa(user.Id) + "/permissions"
+	slug := "/api/admin/users/" + strconv.FormatInt(user.Id, 10) + "/permissions"
 	url := grafanaClientSettings.url + slug
 
 	jsonReq := `{"isGrafanaAdmin": ` + strconv.FormatBool(isAdmin) + "}"
@@ -276,7 +275,7 @@ func CreateUser(user *User) (*User, error) {
 		}
 
 		if data["message"] == "User created" {
-			user.Id = int(data["id"].(float64))
+			user.Id = int64(data["id"].(float64))
 		}
 
 		return user, nil
@@ -291,7 +290,7 @@ func DeleteUser(user *User) (bool, error) {
 		return false, errors.New("Nil pointer")
 	}
 
-	slug := "/api/admin/users/" + strconv.Itoa(user.Id)
+	slug := "/api/admin/users/" + strconv.FormatInt(user.Id, 10)
 	url := grafanaClientSettings.url + slug
 
 	req, err := http.NewRequest(http.MethodDelete, url, nil)
@@ -336,7 +335,7 @@ func GetOrganizationsByUser(user *User) (*[]UserOrganization, error) {
 		return nil, errors.New("Nil pointer")
 	}
 
-	slug := "/api/users/" + strconv.Itoa(user.Id) + "/orgs"
+	slug := "/api/users/" + strconv.FormatInt(user.Id, 10) + "/orgs"
 	url := grafanaClientSettings.url + slug
 
 	req, err := http.NewRequest(http.MethodGet, url, http.NoBody)
@@ -419,13 +418,13 @@ EXIST:
 		jsonReq := ""
 
 		if userAlreadyInOrg == true {
-			slug = "/api/orgs/" + strconv.Itoa(organization.Id) + "/users/" + strconv.Itoa(user.Id)
+			slug = "/api/orgs/" + strconv.FormatInt(organization.Id, 10) + "/users/" + strconv.FormatInt(user.Id, 10)
 			url = grafanaClientSettings.url + slug
 
 			jsonReq = `{"role": "` + userOrganization.Role + `"}`
 			httpMethod = http.MethodPatch
 		} else {
-			slug = "/api/orgs/" + strconv.Itoa(organization.Id) + "/users/"
+			slug = "/api/orgs/" + strconv.FormatInt(organization.Id, 10) + "/users/"
 			url = grafanaClientSettings.url + slug
 
 			jsonReq = `{"loginOrEmail": "` + user.Email + `", "role": "` + userOrganization.Role + `"}`
@@ -499,7 +498,7 @@ func DeleteUserFromOrganization(user *User, organization *Organization) (bool, e
 		return false, errors.New("Nil pointer")
 	}
 
-	slug := "/api/orgs/" + strconv.Itoa(organization.Id) + "/users/" + strconv.Itoa(user.Id)
+	slug := "/api/orgs/" + strconv.FormatInt(organization.Id, 10) + "/users/" + strconv.FormatInt(user.Id, 10)
 	url := grafanaClientSettings.url + slug
 
 	req, err := http.NewRequest(http.MethodDelete, url, nil)

@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/flamego/auth"
 	"github.com/flamego/flamego"
@@ -23,86 +26,172 @@ func Start() {
 	f := flamego.Classic()
 	f.Map(log.New(os.Stdout, "[grafana-adapter] ", 0))
 
-	//users
-	f.Get("/users/", func(c flamego.Context) string {
-		requestBody, err := c.Request().Body().Bytes()
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-		}
+	/*
+	   - USERS -
+	   Retieving all users:
+	   GET
+	   .../users
 
+	   Retieving | Deleting single user:
+	   GET | DELETE
+	   .../users/{id*} (.../users/1 || .../users/id=1 || .../users/login=admin || .../users/email=admin@localhost)
+	   .../users/?id=1
+	   .../users/?login=test
+	   .../users/?email=test@test.test
+
+	   Creating user:
+	   POST
+	   .../users/ (data: {})
+	*/
+	f.Group("/users", func() {
 		var user grafana.User
-		err = json.Unmarshal(requestBody, &user)
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-		}
+		f.Combo("/", func(c flamego.Context) {
+			user = grafana.User{}
+			user.Id := c.QueryInt64("id")
+			user.Login := c.QueryTrim("login")
+			user.Email := c.QueryTrim("email")
 
-		res, err := grafana.GetUser(&user)
-		if user.Id == 0 {
+			if user.Id > 0 || user.Login != "" || user.Email != "" {
+				_, err := grafana.GetUser(&user)
+				if err != nil && err.Error() == "Empty result" {
+					user = grafana.User{}
+					c.ResponseWriter().WriteHeader(http.StatusNotFound)
+				} else if err != nil {
+					log.Print("Got error: " + err.Error())
+					c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+				}
+			}
+		}).Get(func(c flamego.Context) string {
+			if user.Id > 0 {
+				jsonResponse, err := json.Marshal(user)
+				if err != nil {
+					log.Print("Got error: " + err.Error())
+					c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+					return "null"
+				}
+				c.ResponseWriter().Header().Add("Content-Type", "application/json")
+				return string(jsonResponse)
+			}
+
+			c.ResponseWriter().WriteHeader(http.StatusNoContent)
 			return "null"
-		}
-		jsonResponse, err := json.Marshal(res)
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-		}
-		c.ResponseWriter().Header().Add("Content-Type", "application/json")
-		return string(jsonResponse)
-	})
-	f.Delete("/users/", func(c flamego.Context) string {
-		requestBody, err := c.Request().Body().Bytes()
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-		}
+		}).Delete(func(c flamego.Context) string {
+			if user.Id == 0 {
+				c.ResponseWriter().WriteHeader(http.StatusNotFound)
+				return "false"
+			}
 
-		var user grafana.User
-		err = json.Unmarshal(requestBody, &user)
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-		}
-		_, err = grafana.GetUser(&user)
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-			return "false"
-		}
+			status, err := grafana.DeleteUser(&user)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+				c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+			}
+			fmt.Printf("Results: %v\n", status)
+			c.ResponseWriter().Header().Add("Content-Type", "application/json")
+			return strconv.FormatBool(status)
+		}).Post(func(c flamego.Context) string {
+			requestBody, err := c.Request().Body().Bytes()
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+			}
 
-		status, err := grafana.DeleteUser(&user)
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-		}
-		fmt.Printf("Results: %v\n", status)
-		c.ResponseWriter().Header().Add("Content-Type", "application/json")
-		return strconv.FormatBool(status)
-	})
-	f.Post("/users/", func(c flamego.Context) string {
-		requestBody, err := c.Request().Body().Bytes()
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-		}
+			err = json.Unmarshal(requestBody, &user)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+			}
 
-		var user grafana.User
-		err = json.Unmarshal(requestBody, &user)
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-		}
+			if user.Password == "" {
+				user.Password = util.RandString(12)
+			}
 
-		if user.Password == "" {
-			user.Password = util.RandString(12)
-		}
+			_, err = grafana.CreateUser(&user)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+			}
 
-		_, err = grafana.CreateUser(&user)
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-		}
+			if user.Login == "" {
+				user.Login = user.Email
+			}
 
-		if user.Login == "" {
-			user.Login = user.Email
-		}
+			result, err := json.Marshal(user)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+			}
 
-		result, err := json.Marshal(user)
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-		}
+			return string(result) //strconv.FormatBool(user.Id > 0);
+		})
+		f.Combo("/{id}", func(c flamego.Context) {
+			user = grafana.User{}
+			id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+			if id > 0 {
+			    user.Id = id
+			} else {
+                r := regexp.MustCompile(`(?m)^(id|login|email)=([\p{L}\d_!-\.@]+)$`)
+                for _, s := range strings.Split(c.Param("id"), ",") {
+                    parsed := r.FindStringSubmatch(s)
+                    if parsed == nil || len(parsed) < 3 {
+                        log.Print("Got error: " + "Unsupported query")
+                        break
+                    }
+                    switch parsed[1] {
+                    case "id":
+                        id, err := strconv.ParseInt(parsed[2], 10, 64)
+                        if err == nil {
+                            user.Id = id
+                        } else {
+                            log.Print("Got error: " + "Unable to parse user id")
+                        }
+                    case "login":
+                        user.Login = parsed[2]
+                    case "email":
+                        reMail := regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+                        if reMail.MatchString(parsed[2]) {
+                            user.Email = parsed[2]
+                        } else {
+                            log.Print("Got error: " + "Unable to parse email")
+                        }
+                    }
+                }
+			}
 
-		return string(result) //strconv.FormatBool(user.Id > 0);
+			if user.Id > 0 || user.Login != "" || user.Email != "" {
+				_, err := grafana.GetUser(&user)
+				if err != nil && err.Error() == "Empty result" {
+					user = grafana.User{}
+					c.ResponseWriter().WriteHeader(http.StatusNotFound)
+				} else if err != nil {
+					log.Print("Got error: " + err.Error())
+					c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+				}
+			}
+		}).Get(func(c flamego.Context) string {
+			if user.Id == 0 {
+				c.ResponseWriter().WriteHeader(http.StatusNotFound)
+				return ""
+			}
+			jsonResponse, err := json.Marshal(user)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+				c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+				return ""
+			}
+			c.ResponseWriter().Header().Add("Content-Type", "application/json")
+			return string(jsonResponse)
+		}).Delete(func(c flamego.Context) string {
+			if user.Id == 0 {
+				c.ResponseWriter().WriteHeader(http.StatusNotFound)
+				return "false"
+			}
+
+			status, err := grafana.DeleteUser(&user)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+				c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+			}
+			fmt.Printf("Results: %v\n", status)
+			c.ResponseWriter().Header().Add("Content-Type", "application/json")
+			return strconv.FormatBool(status)
+		})
 	})
 	f.Get("/users/search/{slug}", func(c flamego.Context) string {
 		res, err := grafana.SearchUsers(c.Param("query"))
