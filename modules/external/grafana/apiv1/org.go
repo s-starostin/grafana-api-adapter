@@ -106,7 +106,7 @@ func GetOrganization(organization *Organization) (*Organization, error) {
 
 		return organization, nil
 	} else if res.StatusCode == 404 {
-	    return nil, errors.New("Empty result")
+		return nil, errors.New("Empty result")
 	}
 
 	return nil, errors.New("Got response: " + strconv.Itoa(res.StatusCode) + ", body: " + string(body))

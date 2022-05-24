@@ -10,29 +10,30 @@ import (
 )
 
 type Datasource struct {
-	Id                int64       `json:"id"`
-	Uid               string      `json:"uid"`
-	OrgId             int64       `json:"orgId"`
+	Id                int64       `json:"id,omitempty"`
+	Uid               string      `json:"uid,omitempty"`
+	OrgId             int64       `json:"orgId,omitempty"`
 	Name              string      `json:"name"`
 	Type              string      `json:"type"`
-	TypeLogoUrl       string      `json:"typeLogoUrl"`
-	Proxy             string      `json:"proxy"`
+	TypeLogoUrl       string      `json:"typeLogoUrl,omitempty"`
+	Proxy             string      `json:"proxy,omitempty"`
+	Access            string      `json:"access,omitempty"`
 	Url               string      `json:"url"`
-	Password          string      `json:"password"`
-	User              string      `json:"user"`
-	Database          string      `json:"database"`
-	BasicAuth         bool        `json:"basicAuth"`
-	BasicAuthUser     string      `json:"basicAuthUser"`
-	BasicAuthPassword string      `json:"basicAuthPassword"`
-	WithCredentials   bool        `json:"withCredentials"`
-	IsDefault         bool        `json:"isDefault"`
-	ReadOnly          bool        `json:"readOnly"`
-	Version           int         `json:"version"`
-	JsonData          interface{} `json:"jsonData"`
-	SecureJsonFields  interface{} `json:"secureJsonFields"`
+	Password          string      `json:"password,omitempty"`
+	User              string      `json:"user,omitempty"`
+	Database          string      `json:"database,omitempty"`
+	BasicAuth         bool        `json:"basicAuth,omitempty"`
+	BasicAuthUser     string      `json:"basicAuthUser,omitempty"`
+	BasicAuthPassword string      `json:"basicAuthPassword,omitempty"`
+	WithCredentials   bool        `json:"withCredentials,omitempty"`
+	IsDefault         bool        `json:"isDefault,omitempty"`
+	ReadOnly          bool        `json:"readOnly,omitempty"`
+	Version           int         `json:"version,omitempty"`
+	JsonData          interface{} `json:"jsonData,omitempty"`
+	SecureJsonFields  interface{} `json:"secureJsonFields,omitempty"`
 }
 
-func CreateDatasource(datasource *Datasource) (*Datasource, error) {
+func CreateDatasourceForUser(user *User, datasource *Datasource) (*Datasource, error) {
 	if datasource == nil {
 		return nil, errors.New("Nil pointer")
 	}
@@ -50,7 +51,7 @@ func CreateDatasource(datasource *Datasource) (*Datasource, error) {
 
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Add("Accept", "application/json")
-	req.SetBasicAuth(grafanaClientSettings.login, grafanaClientSettings.password)
+	req.SetBasicAuth(user.Login, user.Password)
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -81,7 +82,7 @@ func CreateDatasource(datasource *Datasource) (*Datasource, error) {
 	return datasource, errors.New("Got response: " + strconv.Itoa(res.StatusCode) + ", body: " + string(body))
 }
 
-func UpdateDatasource(datasource *Datasource) (bool, error) {
+func UpdateDatasourceForUser(user *User, datasource *Datasource) (bool, error) {
 	slug := "/api/datasources/" + strconv.FormatInt(datasource.Id, 10)
 	url := grafanaClientSettings.url + slug
 
@@ -95,7 +96,7 @@ func UpdateDatasource(datasource *Datasource) (bool, error) {
 
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Add("Accept", "application/json")
-	req.SetBasicAuth(grafanaClientSettings.login, grafanaClientSettings.password)
+	req.SetBasicAuth(user.Login, user.Password)
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -124,12 +125,21 @@ func UpdateDatasource(datasource *Datasource) (bool, error) {
 	return false, errors.New("Got response: " + strconv.Itoa(res.StatusCode) + ", body: " + string(body))
 }
 
-func DeleteDatasource(datasource *Datasource) (bool, error) {
+func DeleteDatasourceForUser(user *User, datasource *Datasource) (bool, error) {
+	slug := ""
+
 	if datasource == nil {
 		return false, errors.New("Nil pointer")
+	} else if datasource.Id > 0 {
+		slug = "/api/datasources/" + strconv.FormatInt(datasource.Id, 10)
+	} else if datasource.Uid != "" {
+		slug = "/api/datasources/uid/" + datasource.Uid
+	} else if datasource.Name != "" {
+		slug = "/api/datasources/name/" + datasource.Name
+	} else {
+		return false, errors.New("No Id, Uid, Name has been set for datasource")
 	}
 
-	slug := "/api/datasources/" + strconv.FormatInt(datasource.Id, 10)
 	url := grafanaClientSettings.url + slug
 
 	req, err := http.NewRequest(http.MethodDelete, url, nil)
@@ -139,7 +149,7 @@ func DeleteDatasource(datasource *Datasource) (bool, error) {
 
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Add("Accept", "application/json")
-	req.SetBasicAuth(grafanaClientSettings.login, grafanaClientSettings.password)
+	req.SetBasicAuth(user.Login, user.Password)
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -168,7 +178,7 @@ func DeleteDatasource(datasource *Datasource) (bool, error) {
 	return false, errors.New("Got response: " + strconv.Itoa(res.StatusCode) + ", body: " + string(body))
 }
 
-func GetDatasource(datasource *Datasource) (*Datasource, error) {
+func GetDatasourceForUser(user *User, datasource *Datasource) (*Datasource, error) {
 	slug := ""
 
 	if datasource == nil {
@@ -192,7 +202,7 @@ func GetDatasource(datasource *Datasource) (*Datasource, error) {
 
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Add("Accept", "application/json")
-	req.SetBasicAuth(grafanaClientSettings.login, grafanaClientSettings.password)
+	req.SetBasicAuth(user.Login, user.Password)
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -221,7 +231,7 @@ func GetDatasource(datasource *Datasource) (*Datasource, error) {
 	return nil, errors.New("Got response: " + strconv.Itoa(res.StatusCode) + ", body: " + string(body))
 }
 
-func GetDatasources() (*[]Datasource, error) {
+func GetDatasourcesForUser(user *User) (*[]Datasource, error) {
 	slug := "/api/datasources"
 	url := grafanaClientSettings.url + slug
 
@@ -232,7 +242,7 @@ func GetDatasources() (*[]Datasource, error) {
 
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Add("Accept", "application/json")
-	req.SetBasicAuth(grafanaClientSettings.login, grafanaClientSettings.password)
+	req.SetBasicAuth(user.Login, user.Password)
 
 	res, err := client.Do(req)
 	if err != nil {

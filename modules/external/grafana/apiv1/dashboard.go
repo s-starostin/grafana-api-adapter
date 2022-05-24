@@ -22,14 +22,14 @@ type DashboardModel struct {
 }
 
 type DashboardMeta struct {
-	FolderId  int64     `json:"folderId,omitempty"`
-	FolderUid string    `json:"folderUid,omitempty"`
-	Url       string    `json:"url,omitempty"`
-	IsStarred bool      `json:"isStarred,omitempty"`
-	IsHome    bool      `json:"isHome,omitempty"`
-	CanSave   bool      `json:"canSave,omitempty"`
-	CanEdit   bool      `json:"canEdit,omitempty"`
-	CanStar   bool      `json:"canStar,omitempty"`
+	FolderId  int64  `json:"folderId,omitempty"`
+	FolderUid string `json:"folderUid,omitempty"`
+	Url       string `json:"url,omitempty"`
+	IsStarred bool   `json:"isStarred,omitempty"`
+	IsHome    bool   `json:"isHome,omitempty"`
+	CanSave   bool   `json:"canSave,omitempty"`
+	CanEdit   bool   `json:"canEdit,omitempty"`
+	CanStar   bool   `json:"canStar,omitempty"`
 }
 
 type Dashboard struct {
@@ -42,12 +42,12 @@ type Dashboard struct {
 }
 
 func UpdateDashboardForUser(user *User, dashboard *Dashboard) (*Dashboard, error) {
-    if user.Login == "" {
-        return nil, errors.New("User login must be set")
-    }
-    if user.Password == "" {
-        return nil, errors.New("User password must be set")
-    }
+	if user.Login == "" {
+		return nil, errors.New("User login must be set")
+	}
+	if user.Password == "" {
+		return nil, errors.New("User password must be set")
+	}
 	if dashboard == nil {
 		return nil, errors.New("Nil pointer")
 	}
@@ -97,12 +97,12 @@ func UpdateDashboardForUser(user *User, dashboard *Dashboard) (*Dashboard, error
 }
 
 func DeleteDashboardForUser(user *User, dashboard *Dashboard) (bool, error) {
-    if user.Login == "" {
-        return false, errors.New("User login must be set")
-    }
-    if user.Password == "" {
-        return false, errors.New("User password must be set")
-    }
+	if user.Login == "" {
+		return false, errors.New("User login must be set")
+	}
+	if user.Password == "" {
+		return false, errors.New("User password must be set")
+	}
 	if dashboard == nil {
 		return false, errors.New("Nil pointer")
 	}
@@ -145,17 +145,17 @@ func DeleteDashboardForUser(user *User, dashboard *Dashboard) (bool, error) {
 }
 
 func GetDashboardForUser(user *User, dashboard *Dashboard) (*Dashboard, error) {
-    if user.Login == "" {
-        return nil, errors.New("User login must be set")
-    }
-    if user.Password == "" {
-        return nil, errors.New("User password must be set")
-    }
-    slug := ""
-    if dashboard.Dashboard.Id > 0 {
-        slug = "/api/search/?dashboardIds=" + strconv.FormatInt(dashboard.Dashboard.Id, 10)
-    } else if len(dashboard.Dashboard.Title) > 0 {
-        slug = "/api/search/?query=" + dashboard.Dashboard.Title
+	if user.Login == "" {
+		return nil, errors.New("User login must be set")
+	}
+	if user.Password == "" {
+		return nil, errors.New("User password must be set")
+	}
+	slug := ""
+	if dashboard.Dashboard.Id > 0 {
+		slug = "/api/search/?dashboardIds=" + strconv.FormatInt(dashboard.Dashboard.Id, 10)
+	} else if len(dashboard.Dashboard.Title) > 0 {
+		slug = "/api/search/?query=" + dashboard.Dashboard.Title
 	}
 	url := grafanaClientSettings.url + slug
 
@@ -181,16 +181,16 @@ func GetDashboardForUser(user *User, dashboard *Dashboard) (*Dashboard, error) {
 	}
 
 	if res.StatusCode == 200 {
-	    var dashboardsResponse []DashboardModel
+		var dashboardsResponse []DashboardModel
 		err = json.Unmarshal(body, &dashboardsResponse)
 		if err != nil {
 			return nil, err
 		}
-        if len(dashboardsResponse) == 1 {
-            dashboard.Dashboard = dashboardsResponse[0]
-            return dashboard, nil
+		if len(dashboardsResponse) == 1 {
+			dashboard.Dashboard = dashboardsResponse[0]
+			return dashboard, nil
 		} else {
-		    return nil, errors.New("Dashboard not found")
+			return nil, errors.New("Dashboard not found")
 		}
 	}
 
@@ -198,13 +198,13 @@ func GetDashboardForUser(user *User, dashboard *Dashboard) (*Dashboard, error) {
 }
 
 func GetDashboardForUserByUid(user *User, dashboard *Dashboard) (*Dashboard, error) {
-    if user.Login == "" {
-        return nil, errors.New("User login must be set")
-    }
-    if user.Password == "" {
-        return nil, errors.New("User password must be set")
-    }
-    slug := "/api/dashboards/uid/" + dashboard.Dashboard.Uid
+	if user.Login == "" {
+		return nil, errors.New("User login must be set")
+	}
+	if user.Password == "" {
+		return nil, errors.New("User password must be set")
+	}
+	slug := "/api/dashboards/uid/" + dashboard.Dashboard.Uid
 	url := grafanaClientSettings.url + slug
 
 	payloadBuffer := new(bytes.Buffer)
@@ -246,12 +246,12 @@ func GetDashboardForUserByUid(user *User, dashboard *Dashboard) (*Dashboard, err
 }
 
 func GetDashboardsForUser(user *User) (*[]Dashboard, error) {
-    if user.Login == "" {
-        return nil, errors.New("User login must be set")
-    }
-    if user.Password == "" {
-        return nil, errors.New("User password must be set")
-    }
+	if user.Login == "" {
+		return nil, errors.New("User login must be set")
+	}
+	if user.Password == "" {
+		return nil, errors.New("User password must be set")
+	}
 	slug := "/api/search/?type=dash-db"
 	url := grafanaClientSettings.url + slug
 
@@ -277,8 +277,8 @@ func GetDashboardsForUser(user *User) (*[]Dashboard, error) {
 	}
 
 	if res.StatusCode == 200 {
-	    var dashboardsResponse []DashboardModel
-	    var dashboards []Dashboard
+		var dashboardsResponse []DashboardModel
+		var dashboards []Dashboard
 		err = json.Unmarshal(body, &dashboardsResponse)
 
 		if err != nil {
@@ -286,8 +286,8 @@ func GetDashboardsForUser(user *User) (*[]Dashboard, error) {
 		}
 
 		for _, entity := range dashboardsResponse {
-            dashboards = append(dashboards, Dashboard{Dashboard: entity})
-        }
+			dashboards = append(dashboards, Dashboard{Dashboard: entity})
+		}
 
 		return &dashboards, nil
 	}

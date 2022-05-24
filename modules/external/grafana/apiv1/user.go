@@ -189,14 +189,14 @@ func UpdateUser(user *User) (*User, error) {
 }
 
 func UpdateUserPassword(user *User) (*User, error) {
-    if user.Id == 0 {
-        return nil, errors.New("No user id provided")
-    }
+	if user.Id == 0 {
+		return nil, errors.New("No user id provided")
+	}
 	slug := "/api/admin/users/" + strconv.FormatInt(user.Id, 10) + "/password"
 	url := grafanaClientSettings.url + slug
-    if user.Password == "" {
-        return nil, errors.New("No user password provided")
-    }
+	if user.Password == "" {
+		return nil, errors.New("No user password provided")
+	}
 	jsonReq := `{"password":"` + user.Password + `"}`
 
 	req, err := http.NewRequest(http.MethodPut, url, bytes.NewBuffer([]byte(jsonReq)))
