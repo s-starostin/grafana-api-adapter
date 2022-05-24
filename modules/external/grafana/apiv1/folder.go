@@ -4,44 +4,40 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 )
 
-type Datasource struct {
-	Id                int64       `json:"id"`
-	Uid               string      `json:"uid"`
-	OrgId             int64       `json:"orgId"`
-	Name              string      `json:"name"`
-	Type              string      `json:"type"`
-	TypeLogoUrl       string      `json:"typeLogoUrl"`
-	Proxy             string      `json:"proxy"`
-	Url               string      `json:"url"`
-	Password          string      `json:"password"`
-	User              string      `json:"user"`
-	Database          string      `json:"database"`
-	BasicAuth         bool        `json:"basicAuth"`
-	BasicAuthUser     string      `json:"basicAuthUser"`
-	BasicAuthPassword string      `json:"basicAuthPassword"`
-	WithCredentials   bool        `json:"withCredentials"`
-	IsDefault         bool        `json:"isDefault"`
-	ReadOnly          bool        `json:"readOnly"`
-	Version           int         `json:"version"`
-	JsonData          interface{} `json:"jsonData"`
-	SecureJsonFields  interface{} `json:"secureJsonFields"`
+type Folder struct {
+	Id        int64     `json:"id,omitempty"`
+	Uid       string    `json:"uid,omitempty"`
+	Title     string    `json:"title"`
+	Url       string    `json:"url,omitempty"`
+	HasAcl    bool      `json:"hasAcl,omitempty"`
+	CanSave   bool      `json:"canSave,omitempty"`
+	CanEdit   bool      `json:"canEdit,omitempty"`
+	CanAdmin  bool      `json:"canAdmin,omitempty"`
+	CreatedBy string    `json:"createdBy,omitempty"`
+	Created   time.Time `json:"created,omitempty"`
+	UpdatedBy string    `json:"updatedBy,omitempty"`
+	Update    time.Time `json:"update,omitempty"`
+	Version   int       `json:"version,omitempty"`
+	Overwrite bool      `json:"overwrite,omitempty"`
 }
 
-func CreateDatasource(datasource *Datasource) (*Datasource, error) {
-	if datasource == nil {
+func CreateFolderForUser(user *User, folder *Folder) (*Folder, error) {
+	if folder == nil {
 		return nil, errors.New("Nil pointer")
 	}
 
-	slug := "/api/datasources"
+	slug := "/api/folders"
 	url := grafanaClientSettings.url + slug
 
 	payloadBuffer := new(bytes.Buffer)
-	json.NewEncoder(payloadBuffer).Encode(datasource)
+	json.NewEncoder(payloadBuffer).Encode(folder)
 
 	req, err := http.NewRequest(http.MethodPost, url, payloadBuffer)
 	if err != nil {
@@ -65,28 +61,23 @@ func CreateDatasource(datasource *Datasource) (*Datasource, error) {
 	}
 
 	if res.StatusCode == 200 {
-		var data map[string]interface{}
-		err = json.Unmarshal(body, &data)
+		err = json.Unmarshal(body, &folder)
 		if err != nil {
 			return nil, err
 		}
 
-		if data["message"] == "Datasource added" {
-			datasource.Id = int64(data["id"].(float64))
-		}
-
-		return datasource, nil
+		return folder, nil
 	}
 
-	return datasource, errors.New("Got response: " + strconv.Itoa(res.StatusCode) + ", body: " + string(body))
+	return folder, errors.New("Got response: " + strconv.Itoa(res.StatusCode) + ", body: " + string(body))
 }
 
-func UpdateDatasource(datasource *Datasource) (bool, error) {
-	slug := "/api/datasources/" + strconv.FormatInt(datasource.Id, 10)
+func UpdateFolderForUser(user *User, folder *Folder) (bool, error) {
+	slug := "/api/folder/" + folder.Uid
 	url := grafanaClientSettings.url + slug
 
 	payloadBuffer := new(bytes.Buffer)
-	json.NewEncoder(payloadBuffer).Encode(datasource)
+	json.NewEncoder(payloadBuffer).Encode(folder)
 
 	req, err := http.NewRequest(http.MethodPut, url, payloadBuffer)
 	if err != nil {
@@ -116,7 +107,7 @@ func UpdateDatasource(datasource *Datasource) (bool, error) {
 			return false, err
 		}
 
-		if data["message"] == "Datasource updated" {
+		if data["message"] == "Folder updated" {
 			return true, nil
 		}
 	}
@@ -124,12 +115,12 @@ func UpdateDatasource(datasource *Datasource) (bool, error) {
 	return false, errors.New("Got response: " + strconv.Itoa(res.StatusCode) + ", body: " + string(body))
 }
 
-func DeleteDatasource(datasource *Datasource) (bool, error) {
-	if datasource == nil {
+func DeleteFolderForUser(user *User, folder *Folder) (bool, error) {
+	if folder == nil {
 		return false, errors.New("Nil pointer")
 	}
 
-	slug := "/api/datasources/" + strconv.FormatInt(datasource.Id, 10)
+	slug := "/api/folders/" + folder.Uid
 	url := grafanaClientSettings.url + slug
 
 	req, err := http.NewRequest(http.MethodDelete, url, nil)
@@ -148,6 +139,8 @@ func DeleteDatasource(datasource *Datasource) (bool, error) {
 
 	defer res.Body.Close()
 
+	fmt.Printf("Results: %v\n", res)
+
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return false, err
@@ -159,33 +152,28 @@ func DeleteDatasource(datasource *Datasource) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-
-		if data["message"] == "Data source deleted" {
-			return true, nil
-		}
+		return true, nil
+	} else if res.StatusCode == 404 {
+		return false, errors.New("Folder not found")
 	}
 
 	return false, errors.New("Got response: " + strconv.Itoa(res.StatusCode) + ", body: " + string(body))
+
 }
 
-func GetDatasource(datasource *Datasource) (*Datasource, error) {
-	slug := ""
+func GetFoldersForUser(user *User, limitOptional ...int) ([]Folder, error) {
+	limit := 1000
 
-	if datasource == nil {
-		return nil, errors.New("Nil pointer")
-	} else if datasource.Id > 0 {
-		slug = "/api/datasources/" + strconv.FormatInt(datasource.Id, 10)
-	} else if datasource.Uid != "" {
-		slug = "/api/datasources/uid/" + datasource.Uid
-	} else if datasource.Name != "" {
-		slug = "/api/datasources/name/" + datasource.Name
-	} else {
-		return nil, errors.New("No Id, Uid, Name has been set for datasource")
+	folders := make([]Folder, 0)
+
+	if len(limitOptional) > 0 {
+		limit = limitOptional[0]
 	}
 
+	slug := "/api/folders/"
 	url := grafanaClientSettings.url + slug
 
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequest(http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -193,6 +181,10 @@ func GetDatasource(datasource *Datasource) (*Datasource, error) {
 	req.Header.Set("Content-Type", "application/json; charset=utf-8")
 	req.Header.Add("Accept", "application/json")
 	req.SetBasicAuth(grafanaClientSettings.login, grafanaClientSettings.password)
+
+	q := req.URL.Query()
+	q.Add("limit", strconv.Itoa(limit))
+	req.URL.RawQuery = q.Encode()
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -207,25 +199,24 @@ func GetDatasource(datasource *Datasource) (*Datasource, error) {
 	}
 
 	if res.StatusCode == 200 {
-		err = json.Unmarshal(body, datasource)
+		err = json.Unmarshal(body, &folders)
 		if err != nil {
 			return nil, err
 		}
-		if datasource.Id == 0 {
-			return nil, errors.New("Empty result")
-		}
-
-		return datasource, nil
+		return folders, nil
 	}
 
 	return nil, errors.New("Got response: " + strconv.Itoa(res.StatusCode) + ", body: " + string(body))
 }
 
-func GetDatasources() (*[]Datasource, error) {
-	slug := "/api/datasources"
+func GetFolderForUser(user *User, folder *Folder) (*Folder, error) {
+	slug := "/api/folders/" + folder.Uid
 	url := grafanaClientSettings.url + slug
 
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	payloadBuffer := new(bytes.Buffer)
+	json.NewEncoder(payloadBuffer).Encode(folder)
+
+	req, err := http.NewRequest(http.MethodGet, url, payloadBuffer)
 	if err != nil {
 		return nil, err
 	}
@@ -247,13 +238,56 @@ func GetDatasources() (*[]Datasource, error) {
 	}
 
 	if res.StatusCode == 200 {
-		var datasources []Datasource
-		err = json.Unmarshal(body, &datasources)
+		err = json.Unmarshal(body, folder)
 		if err != nil {
 			return nil, err
 		}
 
-		return &datasources, nil
+		return folder, nil
+	} else if res.StatusCode == 404 {
+		return folder, errors.New("Empty result")
+	}
+
+	return nil, errors.New("Got response: " + strconv.Itoa(res.StatusCode) + ", body: " + string(body))
+}
+
+func GetFolderByIdForUser(user *User, folder *Folder) (*Folder, error) {
+	slug := "/api/folders/id/" + strconv.FormatInt(folder.Id, 10)
+	url := grafanaClientSettings.url + slug
+
+	payloadBuffer := new(bytes.Buffer)
+	json.NewEncoder(payloadBuffer).Encode(folder)
+
+	req, err := http.NewRequest(http.MethodGet, url, payloadBuffer)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	req.Header.Add("Accept", "application/json")
+	req.SetBasicAuth(grafanaClientSettings.login, grafanaClientSettings.password)
+
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer res.Body.Close()
+
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if res.StatusCode == 200 {
+		err = json.Unmarshal(body, folder)
+		if err != nil {
+			return nil, err
+		}
+
+		return folder, nil
+	} else if res.StatusCode == 404 {
+		return folder, errors.New("Empty result")
 	}
 
 	return nil, errors.New("Got response: " + strconv.Itoa(res.StatusCode) + ", body: " + string(body))

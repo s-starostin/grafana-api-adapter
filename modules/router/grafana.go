@@ -1,7 +1,9 @@
 package router
 
 import (
+    "crypto/md5"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -9,6 +11,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/flamego/auth"
 	"github.com/flamego/flamego"
@@ -47,9 +50,9 @@ func Start() {
 		var user grafana.User
 		f.Combo("/", func(c flamego.Context) {
 			user = grafana.User{}
-			user.Id := c.QueryInt64("id")
-			user.Login := c.QueryTrim("login")
-			user.Email := c.QueryTrim("email")
+			user.Id = c.QueryInt64("id")
+			user.Login = c.QueryTrim("login")
+			user.Email = c.QueryTrim("email")
 
 			if user.Id > 0 || user.Login != "" || user.Email != "" {
 				_, err := grafana.GetUser(&user)
@@ -124,34 +127,34 @@ func Start() {
 			user = grafana.User{}
 			id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
 			if id > 0 {
-			    user.Id = id
+				user.Id = id
 			} else {
-                r := regexp.MustCompile(`(?m)^(id|login|email)=([\p{L}\d_!-\.@]+)$`)
-                for _, s := range strings.Split(c.Param("id"), ",") {
-                    parsed := r.FindStringSubmatch(s)
-                    if parsed == nil || len(parsed) < 3 {
-                        log.Print("Got error: " + "Unsupported query")
-                        break
-                    }
-                    switch parsed[1] {
-                    case "id":
-                        id, err := strconv.ParseInt(parsed[2], 10, 64)
-                        if err == nil {
-                            user.Id = id
-                        } else {
-                            log.Print("Got error: " + "Unable to parse user id")
-                        }
-                    case "login":
-                        user.Login = parsed[2]
-                    case "email":
-                        reMail := regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
-                        if reMail.MatchString(parsed[2]) {
-                            user.Email = parsed[2]
-                        } else {
-                            log.Print("Got error: " + "Unable to parse email")
-                        }
-                    }
-                }
+				r := regexp.MustCompile(`(?m)^(id|login|email)=([\p{L}\d_!-\.@]+)$`)
+				for _, s := range strings.Split(c.Param("id"), ",") {
+					parsed := r.FindStringSubmatch(s)
+					if parsed == nil || len(parsed) < 3 {
+						log.Print("Got error: " + "Unsupported query")
+						break
+					}
+					switch parsed[1] {
+					case "id":
+						id, err := strconv.ParseInt(parsed[2], 10, 64)
+						if err == nil {
+							user.Id = id
+						} else {
+							log.Print("Got error: " + "Unable to parse user id")
+						}
+					case "login":
+						user.Login = parsed[2]
+					case "email":
+						reMail := regexp.MustCompile("^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$")
+						if reMail.MatchString(parsed[2]) {
+							user.Email = parsed[2]
+						} else {
+							log.Print("Got error: " + "Unable to parse email")
+						}
+					}
+				}
 			}
 
 			if user.Id > 0 || user.Login != "" || user.Email != "" {
@@ -211,23 +214,28 @@ func Start() {
 			log.Print("Got error: " + err.Error())
 		}
 
-		var user grafana.User
-		err = json.Unmarshal(requestBody, &user)
+		var userOrganizationsRequest struct {
+			User          grafana.User
+			Organizations []grafana.UserOrganization
+		}
+
+		err = json.Unmarshal(requestBody, &userOrganizationsRequest)
 		if err != nil {
 			log.Print("Got error: " + err.Error())
 		}
-		_, err = grafana.GetUser(&user)
+
+		_, err = grafana.GetUser(&userOrganizationsRequest.User)
 		if err != nil {
 			log.Print("Got error: " + err.Error())
 			return "false"
 		}
 
-		_, err = grafana.SetUserOrganizations(&user)
+		_, err = grafana.SetUserOrganizations(&userOrganizationsRequest.User, &userOrganizationsRequest.Organizations)
 		if err != nil {
 			log.Print("Got error: " + err.Error())
 		}
 
-		result, err := json.Marshal(user)
+		result, err := json.Marshal(userOrganizationsRequest.User)
 		if err != nil {
 			log.Print("Got error: " + err.Error())
 		}
@@ -235,90 +243,578 @@ func Start() {
 		return string(result)
 	})
 
-	//organizations
-	f.Get("/organizations/", func(c flamego.Context) string {
-		requestBody, err := c.Request().Body().Bytes()
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-		}
+	/*
+	   - ORGANIZATIONS -
+	   Retieving all organizations:
+	   GET
+	   .../organizations
 
-		jsonResponse := []byte("")
+	   Retieving | Deleting single organization:
+	   GET | DELETE
+	   .../organizations/{id*} (.../organizations/1 || .../organizations/test)
+	   .../organizations/?id=1
+	   .../organizations/?name=test
 
-		if string(requestBody) == "" {
-			res, err := grafana.GetOrganizations()
+	   Creating organization:
+	   POST
+	   .../organizations/ (data: {})
+	*/
+	f.Group("/organizations", func() {
+		var organization grafana.Organization
+		f.Combo("/", func(c flamego.Context) {
+			organization = grafana.Organization{}
+			organization.Id = c.QueryInt64("id")
+			organization.Name = c.QueryTrim("name")
+
+			if organization.Id > 0 || organization.Name != "" {
+				_, err := grafana.GetOrganization(&organization)
+				if err != nil && err.Error() == "Empty result" {
+					organization = grafana.Organization{}
+					c.ResponseWriter().WriteHeader(http.StatusNotFound)
+				} else if err != nil {
+					log.Print("Got error: " + err.Error())
+					c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+				}
+			}
+
+		}).Get(func(c flamego.Context) string {
+			if organization.Id > 0 {
+				jsonResponse, err := json.Marshal(organization)
+				if err != nil {
+					log.Print("Got error: " + err.Error())
+					c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+					return "null"
+				}
+				c.ResponseWriter().Header().Add("Content-Type", "application/json")
+				return string(jsonResponse)
+			}
+
+            var organizations []grafana.Organization
+
+			organizations, err := grafana.GetOrganizations()
 			if err != nil {
 				log.Print("Got error: " + err.Error())
+				c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
 			}
-			jsonResponse, err = json.Marshal(res)
-			if err != nil {
+            jsonResponse, err := json.Marshal(organizations)
+            if err != nil {
 				log.Print("Got error: " + err.Error())
-			}
-		} else {
-			var organization grafana.Organization
-			err := json.Unmarshal(requestBody, &organization)
-			if err != nil {
-				log.Print("Got error: " + err.Error())
-			}
-
-			res, err := grafana.GetOrganization(&organization)
-			if organization.Id == 0 {
+				c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
 				return "null"
 			}
-			jsonResponse, err = json.Marshal(res)
+			c.ResponseWriter().Header().Add("Content-Type", "application/json")
+			return string(jsonResponse)
+		}).Delete(func(c flamego.Context) string {
+			if organization.Id == 0 {
+				c.ResponseWriter().WriteHeader(http.StatusNotFound)
+				return "false"
+			}
+
+			status, err := grafana.DeleteOrganization(&organization)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+				c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+			}
+			fmt.Printf("Results: %v\n", status)
+			c.ResponseWriter().Header().Add("Content-Type", "application/json")
+			return strconv.FormatBool(status)
+		}).Post(func(c flamego.Context) string {
+			requestBody, err := c.Request().Body().Bytes()
 			if err != nil {
 				log.Print("Got error: " + err.Error())
 			}
-		}
-		c.ResponseWriter().Header().Add("Content-Type", "application/json")
-		return string(jsonResponse)
-	})
-	f.Post("/organizations/", func(c flamego.Context) string {
-		requestBody, err := c.Request().Body().Bytes()
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-		}
 
-		var organization grafana.Organization
-		err = json.Unmarshal(requestBody, &organization)
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-		}
+			err = json.Unmarshal(requestBody, &organization)
+		    if err != nil {
+			    log.Print("Got error: " + err.Error())
+		    }
 
-		_, err = grafana.CreateOrganization(&organization)
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-		}
+			_, err = grafana.CreateOrganization(&organization)
+		    if err != nil {
+			    log.Print("Got error: " + err.Error())
+		    }
 
-		result, err := json.Marshal(organization)
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-		}
+			result, err := json.Marshal(organization)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+			}
 
-		return string(result)
-	})
-	f.Delete("/organizations/", func(c flamego.Context) string {
-		requestBody, err := c.Request().Body().Bytes()
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-		}
+			return string(result)
+		})
 
-		var organization grafana.Organization
-		err = json.Unmarshal(requestBody, &organization)
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-		}
+		getOrganization := func(uid string) (grafana.Organization, error) {
+		    organization = grafana.Organization{}
+		    id, _ := strconv.ParseInt(uid, 10, 64)
+            if id > 0 {
+				organization.Id = id
+				_, err := grafana.GetOrganization(&organization)
+				if err != nil {
+				    return grafana.Organization{}, err
+				}
+			}
 
-		_, err = grafana.GetOrganization(&organization)
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-		}
+			if len(uid) > 0 && organization.Name == "" {
+				reName := regexp.MustCompile(`^([\p{L}\d\s_!-\.@|\]\[\(\)]+)*$`)
+				if reName.MatchString(uid) {
+					organization.Name = uid
+				} else {
+					return grafana.Organization{}, errors.New("Unable to parse organization name")
+				}
 
-		result, err := grafana.DeleteOrganization(&organization)
-		if err != nil {
-			log.Print("Got error: " + err.Error())
-		}
+				_, err := grafana.GetOrganization(&organization)
+				if err != nil {
+				    return grafana.Organization{}, err
+				}
+			}
 
-		return strconv.FormatBool(result)
+			return organization, nil
+        }
+
+		f.Combo("/{id}", func(c flamego.Context) {
+		    var err error
+			organization, err = getOrganization(c.Param("id"))
+			if err != nil && err.Error() == "Empty result" {
+				organization = grafana.Organization{}
+				c.ResponseWriter().WriteHeader(http.StatusNotFound)
+			} else if err != nil {
+				log.Print("Got error: " + err.Error())
+				c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+			}
+		}).Get(func(c flamego.Context) string {
+			if organization.Id == 0 {
+				c.ResponseWriter().WriteHeader(http.StatusNotFound)
+				return ""
+			}
+			jsonResponse, err := json.Marshal(organization)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+				c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+				return ""
+			}
+			c.ResponseWriter().Header().Add("Content-Type", "application/json")
+			return string(jsonResponse)
+		}).Delete(func(c flamego.Context) string {
+			if organization.Id == 0 {
+				c.ResponseWriter().WriteHeader(http.StatusNotFound)
+				return "false"
+			}
+
+			status, err := grafana.DeleteOrganization(&organization)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+				c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+			}
+			fmt.Printf("Results: %v\n", status)
+			c.ResponseWriter().Header().Add("Content-Type", "application/json")
+			return strconv.FormatBool(status)
+		})
+
+        var orgServiceUser grafana.User
+        /*
+           - DASHBOARDS FOR ORGANIZATION -
+
+           Retieving:
+           GET
+           .../organizations/{orgId}/dashboards/ (.../organizations/11/dashboards/ || .../organizations/test/dashboards/)
+
+           Retieving | Deleting single dashboard:
+           GET | DELETE
+           .../organizations/{orgId}/dashboards/{uid} (.../organizations/11/dashboards/GPXicXZRk || .../organizations/test/dashboards/organization%20title || .../organizations/test/dashboards/23)
+
+           Creating dashboard:
+           POST
+           .../organizations/{orgId}/dashboards/ (data: {})
+        */
+
+		f.Combo("/{orgId}/dashboards/", func(c flamego.Context) {
+		    var err error
+			organization, err = getOrganization(c.Param("orgId"))
+			if err != nil && err.Error() == "Empty result" {
+				organization = grafana.Organization{}
+				c.ResponseWriter().WriteHeader(http.StatusNotFound)
+			} else if err != nil {
+				log.Print("Got error: " + err.Error())
+				c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+			} else {
+			    orgServiceUser.Login = "svc" + strconv.FormatInt(organization.Id, 10) + "." + fmt.Sprintf("%x", md5.Sum([]byte(organization.Name)))
+			    orgServiceUser.Password = util.RandString(12)
+			    orgServiceUser.OrgId = organization.Id
+
+			    _, err = grafana.CreateUser(&orgServiceUser)
+			    if err != nil && strings.Contains(err.Error(), "already exists") {
+			        _, err = grafana.GetUser(&orgServiceUser)
+			        if err != nil {
+                        log.Print("Got error: " + err.Error())
+                    }
+			        _, err = grafana.UpdateUserPassword(&orgServiceUser)
+			        if err != nil {
+                        log.Print("Got error: " + err.Error())
+                    }
+			    } else if err != nil {
+                    log.Print("Got error: " + err.Error())
+                }
+
+                if orgServiceUser.Id > 0 {
+                    serviceUserOrgs := []grafana.UserOrganization{}
+                    serviceUserOrgs = append(serviceUserOrgs, grafana.UserOrganization{
+                        Id: organization.Id,
+                        Name: organization.Name,
+                        Role: "Admin",
+                    })
+
+                    _, err = grafana.SetUserOrganizations(&orgServiceUser, &serviceUserOrgs)
+                    if err != nil {
+                        log.Print("Got error: " + err.Error())
+                    }
+                }
+			}
+		}).Get(func(c flamego.Context) string {
+			if organization.Id == 0 {
+				c.ResponseWriter().WriteHeader(http.StatusNotFound)
+				return ""
+			}
+
+			dashboards, err := grafana.GetDashboardsForUser(&orgServiceUser)
+
+			jsonResponse, err := json.Marshal(dashboards)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+				c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+				return ""
+			}
+			c.ResponseWriter().Header().Add("Content-Type", "application/json")
+			return string(jsonResponse)
+		}).Post(func(c flamego.Context) string {
+			requestBody, err := c.Request().Body().Bytes()
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+			}
+            var dashboard grafana.Dashboard
+            _, err = grafana.GetDashboardForUser(&orgServiceUser,&dashboard)
+			if err != nil && err.Error() == "Empty result" {
+				dashboard = grafana.Dashboard{}
+			}
+			err = json.Unmarshal(requestBody, &dashboard)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+			}
+			dashboard.Overwrite = true
+			if len(dashboard.Message) == 0 {
+			    dashboard.Message = "Grafana adapter update " + time.Now().Format("02-01-2006 15:04:05")
+			}
+			_, err = grafana.UpdateDashboardForUser(&orgServiceUser,&dashboard)
+			if err != nil && strings.Contains(err.Error(), "Dashboard not found") {
+			    c.ResponseWriter().WriteHeader(http.StatusNotFound)
+				return "false"
+			} else if err != nil && strings.Contains(err.Error(), "Dashboard name cannot be the same") {
+			    c.ResponseWriter().WriteHeader(http.StatusBadRequest)
+				return "false"
+			} else if err != nil {
+				log.Print("Got error: " + err.Error())
+			}
+
+			result, err := json.Marshal(dashboard)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+			}
+
+			return string(result)
+		})
+		var dashboard grafana.Dashboard
+		f.Combo("/{orgId}/dashboards/{uid}", func(c flamego.Context) {
+		    var err error
+			organization, err = getOrganization(c.Param("orgId"))
+			if err != nil && err.Error() == "Empty result" {
+				organization = grafana.Organization{}
+				c.ResponseWriter().WriteHeader(http.StatusNotFound)
+			} else if err != nil {
+				log.Print("Got error: " + err.Error())
+				c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+			} else {
+			    orgServiceUser.Login = "svc" + strconv.FormatInt(organization.Id, 10) + "." + fmt.Sprintf("%x", md5.Sum([]byte(organization.Name)))
+			    orgServiceUser.Password = util.RandString(12)
+			    orgServiceUser.OrgId = organization.Id
+
+			    _, err = grafana.CreateUser(&orgServiceUser)
+			    if err != nil && strings.Contains(err.Error(), "already exists") {
+			        _, err = grafana.GetUser(&orgServiceUser)
+			        if err != nil {
+                        log.Print("Got error: " + err.Error())
+                    }
+			        _, err = grafana.UpdateUserPassword(&orgServiceUser)
+			        if err != nil {
+                        log.Print("Got error: " + err.Error())
+                    }
+			    } else if err != nil {
+                    log.Print("Got error: " + err.Error())
+                }
+
+                if orgServiceUser.Id > 0 {
+                    serviceUserOrgs := []grafana.UserOrganization{}
+                    serviceUserOrgs = append(serviceUserOrgs, grafana.UserOrganization{
+                        Id: organization.Id,
+                        Name: organization.Name,
+                        Role: "Admin",
+                    })
+
+                    _, err = grafana.SetUserOrganizations(&orgServiceUser, &serviceUserOrgs)
+                    if err != nil {
+                        log.Print("Got error: " + err.Error())
+                    }
+
+                    dashboard = grafana.Dashboard{}
+                    uid := c.Param("uid")
+                    id, _ := strconv.ParseInt(uid, 10, 64)
+                    if id > 0 {
+                        dashboard.Dashboard.Id = id
+                        _, err := grafana.GetDashboardForUser(&orgServiceUser, &dashboard)
+                        if err != nil {
+                            log.Print("Got error: " + err.Error())
+                        }
+                    }
+                    if len(uid) > 0 && dashboard.Dashboard.Title == "" {
+                        reName := regexp.MustCompile(`^([\p{L}\d\s_!-\.@|\]\[\(\)]+)*$`)
+                        if reName.MatchString(uid) {
+                            dashboard.Dashboard.Title = uid
+                            _, err := grafana.GetDashboardForUser(&orgServiceUser, &dashboard)
+                            if err != nil {
+                                log.Print("Got error: " + err.Error())
+                            }
+                        }
+                    }
+                }
+			}
+		}).Get(func(c flamego.Context) string {
+			if dashboard.Dashboard.Uid == "" {
+				c.ResponseWriter().WriteHeader(http.StatusNotFound)
+				return ""
+			}
+			jsonResponse, err := json.Marshal(&dashboard)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+				c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+				return ""
+			}
+			c.ResponseWriter().Header().Add("Content-Type", "application/json")
+			return string(jsonResponse)
+		}).Delete(func(c flamego.Context) string {
+			if dashboard.Dashboard.Uid == "" {
+				c.ResponseWriter().WriteHeader(http.StatusNotFound)
+				return "false"
+			}
+
+			status, err := grafana.DeleteDashboardForUser(&orgServiceUser,&dashboard)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+				c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+			}
+
+			c.ResponseWriter().Header().Add("Content-Type", "application/json")
+			return strconv.FormatBool(status)
+		})
+
+		/*
+           - FOLDERS FOR ORGANIZATION -
+           Retieving all folders:
+           GET
+           .../organizations/{orgId}/folders (.../organizations/11/dashboards/)
+
+           Retieving | Updating | Deleting | Updating single fodler:
+           GET | DELETE
+           .../organizations/{orgId}/folders/{id} (.../organizations/11/folders/nErXDvCkzz | .../organizations/11/folders/11)
+
+           Creating folder:
+           POST
+           .../organizations/{orgId}/folders/ (data: {})
+        */
+
+		var folder grafana.Folder
+		f.Combo("/{orgId}/folders/", func(c flamego.Context) {
+		    var err error
+			organization, err = getOrganization(c.Param("orgId"))
+			if err != nil && err.Error() == "Empty result" {
+				organization = grafana.Organization{}
+				c.ResponseWriter().WriteHeader(http.StatusNotFound)
+			} else if err != nil {
+				log.Print("Got error: " + err.Error())
+				c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+			} else {
+			    orgServiceUser.Login = "svc" + strconv.FormatInt(organization.Id, 10) + "." + fmt.Sprintf("%x", md5.Sum([]byte(organization.Name)))
+			    orgServiceUser.Password = util.RandString(12)
+			    orgServiceUser.OrgId = organization.Id
+
+			    _, err = grafana.CreateUser(&orgServiceUser)
+			    if err != nil && strings.Contains(err.Error(), "already exists") {
+			        _, err = grafana.GetUser(&orgServiceUser)
+			        if err != nil {
+                        log.Print("Got error: " + err.Error())
+                    }
+			        _, err = grafana.UpdateUserPassword(&orgServiceUser)
+			        if err != nil {
+                        log.Print("Got error: " + err.Error())
+                    }
+			    } else if err != nil {
+                    log.Print("Got error: " + err.Error())
+                }
+
+                if orgServiceUser.Id > 0 {
+                    serviceUserOrgs := []grafana.UserOrganization{}
+                    serviceUserOrgs = append(serviceUserOrgs, grafana.UserOrganization{
+                        Id: organization.Id,
+                        Name: organization.Name,
+                        Role: "Admin",
+                    })
+
+                    _, err = grafana.SetUserOrganizations(&orgServiceUser, &serviceUserOrgs)
+                    if err != nil {
+                        log.Print("Got error: " + err.Error())
+                    }
+                }
+			}
+		}).Get(func(c flamego.Context) string {
+		    if organization.Id == 0 {
+				c.ResponseWriter().WriteHeader(http.StatusNotFound)
+				return ""
+			}
+			folders, err := grafana.GetFoldersForUser(&orgServiceUser)
+
+			jsonResponse, err := json.Marshal(folders)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+				c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+				return ""
+			}
+			c.ResponseWriter().Header().Add("Content-Type", "application/json")
+			return string(jsonResponse)
+
+		}).Post(func(c flamego.Context) string {
+			requestBody, err := c.Request().Body().Bytes()
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+			}
+
+			var folder grafana.Folder
+
+			err = json.Unmarshal(requestBody, &folder)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+			}
+
+			_, err = grafana.CreateFolderForUser(&orgServiceUser,&folder)
+			if err != nil && strings.Contains(err.Error(), "Folder name cannot be the same") {
+			    c.ResponseWriter().WriteHeader(http.StatusBadRequest)
+				return "false"
+			} else if err != nil && strings.Contains(err.Error(), "already exists") {
+			    c.ResponseWriter().WriteHeader(http.StatusConflict)
+				return "false"
+			} else if err != nil {
+				log.Print("Got error: " + err.Error())
+			}
+
+			result, err := json.Marshal(folder)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+			}
+
+			return string(result)
+		})
+		f.Combo("/{orgId}/folders/{id}", func(c flamego.Context) {
+            var err error
+			organization, err = getOrganization(c.Param("orgId"))
+			if err != nil && err.Error() == "Empty result" {
+				organization = grafana.Organization{}
+				c.ResponseWriter().WriteHeader(http.StatusNotFound)
+			} else if err != nil {
+				log.Print("Got error: " + err.Error())
+				c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+			} else {
+			    orgServiceUser.Login = "svc" + strconv.FormatInt(organization.Id, 10) + "." + fmt.Sprintf("%x", md5.Sum([]byte(organization.Name)))
+			    orgServiceUser.Password = util.RandString(12)
+			    orgServiceUser.OrgId = organization.Id
+
+			    _, err = grafana.CreateUser(&orgServiceUser)
+			    if err != nil && strings.Contains(err.Error(), "already exists") {
+			        _, err = grafana.GetUser(&orgServiceUser)
+			        if err != nil {
+                        log.Print("Got error: " + err.Error())
+                    }
+			        _, err = grafana.UpdateUserPassword(&orgServiceUser)
+			        if err != nil {
+                        log.Print("Got error: " + err.Error())
+                    }
+			    } else if err != nil {
+                    log.Print("Got error: " + err.Error())
+                }
+
+                if orgServiceUser.Id > 0 {
+                    serviceUserOrgs := []grafana.UserOrganization{}
+                    serviceUserOrgs = append(serviceUserOrgs, grafana.UserOrganization{
+                        Id: organization.Id,
+                        Name: organization.Name,
+                        Role: "Admin",
+                    })
+
+                    _, err = grafana.SetUserOrganizations(&orgServiceUser, &serviceUserOrgs)
+                    if err != nil {
+                        log.Print("Got error: " + err.Error())
+                    }
+
+                    folder = grafana.Folder{}
+			        id, _ := strconv.ParseInt(c.Param("id"), 10, 64)
+			        uid := c.Param("id")
+			        if id > 0 {
+                        folder.Id = id
+                        _, err := grafana.GetFolderByIdForUser(&orgServiceUser, &folder)
+                        if err != nil && err.Error() == "Empty result" {
+                            folder = grafana.Folder{}
+                            c.ResponseWriter().WriteHeader(http.StatusNotFound)
+                        } else if err != nil {
+                            log.Print("Got error: " + err.Error())
+                            c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+                        }
+                    }
+
+                    if len(uid) > 0 && folder.Uid == "" {
+                        folder.Uid = uid
+                        _, err := grafana.GetFolderForUser(&orgServiceUser, &folder)
+                        if err != nil && err.Error() == "Empty result" {
+                            folder = grafana.Folder{}
+                            c.ResponseWriter().WriteHeader(http.StatusNotFound)
+                        } else if err != nil {
+                            log.Print("Got error: " + err.Error())
+                            c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+                        }
+                    }
+                }
+			}
+		}).Get(func(c flamego.Context) string {
+			if folder.Uid == "" {
+				c.ResponseWriter().WriteHeader(http.StatusNotFound)
+				return ""
+			}
+			jsonResponse, err := json.Marshal(folder)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+				c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+				return ""
+			}
+			c.ResponseWriter().Header().Add("Content-Type", "application/json")
+			return string(jsonResponse)
+		}).Delete(func(c flamego.Context) string {
+			if folder.Uid == "" {
+				c.ResponseWriter().WriteHeader(http.StatusNotFound)
+				return "false"
+			}
+
+			status, err := grafana.DeleteFolderForUser(&orgServiceUser, &folder)
+			if err != nil {
+				log.Print("Got error: " + err.Error())
+				c.ResponseWriter().WriteHeader(http.StatusInternalServerError)
+			}
+
+			c.ResponseWriter().Header().Add("Content-Type", "application/json")
+			return strconv.FormatBool(status)
+		})
 	})
 
 	//index

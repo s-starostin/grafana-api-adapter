@@ -25,7 +25,7 @@ type OrganizationUser struct {
 	LastSeenAt time.Time `json:"lastSeenAt"`
 }
 
-func GetOrganizations() (*[]Organization, error) {
+func GetOrganizations() ([]Organization, error) {
 	slug := "/api/orgs"
 	url := grafanaClientSettings.url + slug
 
@@ -56,7 +56,7 @@ func GetOrganizations() (*[]Organization, error) {
 			return nil, err
 		}
 
-		return &organizations, nil
+		return organizations, nil
 	}
 
 	return nil, errors.New("Got response: " + strconv.Itoa(res.StatusCode) + ", body: " + string(body))
@@ -103,11 +103,10 @@ func GetOrganization(organization *Organization) (*Organization, error) {
 		if err != nil {
 			return nil, err
 		}
-		if organization.Id == 0 {
-			return nil, errors.New("Empty result")
-		}
 
 		return organization, nil
+	} else if res.StatusCode == 404 {
+	    return nil, errors.New("Empty result")
 	}
 
 	return nil, errors.New("Got response: " + strconv.Itoa(res.StatusCode) + ", body: " + string(body))
